@@ -2,11 +2,14 @@ from flask import Flask, render_template, jsonify, request
 import requests
 import os
 
-app = Flask(__name__)
+# Get the parent directory path
+basedir = os.path.abspath(os.path.dirname(__file__))
+parent_dir = os.path.dirname(basedir)
 
-# Configure Flask for Vercel
-app.config['TEMPLATES_AUTO_RELOAD'] = True
-app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
+app = Flask(__name__,
+            template_folder=os.path.join(parent_dir, 'templates'),
+            static_folder=os.path.join(parent_dir, 'static'))
+
 
 # JioSaavn API Base URL
 API_BASE_URL = "https://jiosaavnapi-nu.vercel.app"
