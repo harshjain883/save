@@ -9,28 +9,32 @@ let currentFilter = 'all';
 let currentSearchQuery = '';
 
 // Event Listeners
-searchInput.addEventListener('input', (e) => {
-    const query = e.target.value.trim();
-    
-    if (query.length > 0) {
-        clearSearchBtn.style.display = 'block';
+if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+        const query = e.target.value.trim();
         
-        // Debounce search
-        clearTimeout(searchTimeout);
-        searchTimeout = setTimeout(() => {
-            performSearch(query);
-        }, 500);
-    } else {
+        if (query.length > 0) {
+            clearSearchBtn.style.display = 'block';
+            
+            // Debounce search
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                performSearch(query);
+            }, 500);
+        } else {
+            clearSearchBtn.style.display = 'none';
+            showBrowseCategories();
+        }
+    });
+}
+
+if (clearSearchBtn) {
+    clearSearchBtn.addEventListener('click', () => {
+        searchInput.value = '';
         clearSearchBtn.style.display = 'none';
         showBrowseCategories();
-    }
-});
-
-clearSearchBtn.addEventListener('click', () => {
-    searchInput.value = '';
-    clearSearchBtn.style.display = 'none';
-    showBrowseCategories();
-});
+    });
+}
 
 filterTabs.forEach(tab => {
     tab.addEventListener('click', () => {
@@ -68,6 +72,8 @@ async function performSearch(query) {
     }
     
     try {
+        console.log('Searching:', query, 'Filter:', currentFilter);
+        
         searchResults.innerHTML = `
             <div class="loading">
                 <i class="fas fa-spinner fa-spin"></i>
@@ -76,15 +82,21 @@ async function performSearch(query) {
         `;
         
         const response = await fetch(`${endpoint}?query=${encodeURIComponent(query)}`);
-        const data = await response.json();
         
-        if (data.success) {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        console.log('Search results:', data);
+        
+        if (data.success && data.data) {
             displaySearchResults(data.data);
         } else {
             searchResults.innerHTML = `
                 <div class="loading">
-                    <i class="fas fa-exclamation-circle"></i>
-                    <p>No results found</p>
+                    <i class="fas fa-search"></i>
+                    <p>No results found for "${query}"</p>
                 </div>
             `;
         }
@@ -104,17 +116,32 @@ function displaySearchResults(data) {
     
     if (currentFilter === 'all') {
         // Display all categories
+        let hasResults = false;
+        
         if (data.songs && data.songs.results && data.songs.results.length > 0) {
             addResultSection('Top Songs', data.songs.results);
+            hasResults = true;
         }
         if (data.albums && data.albums.results && data.albums.results.length > 0) {
             addResultSection('Albums', data.albums.results);
+            hasResults = true;
         }
         if (data.artists && data.artists.results && data.artists.results.length > 0) {
             addResultSection('Artists', data.artists.results);
+            hasResults = true;
         }
         if (data.playlists && data.playlists.results && data.playlists.results.length > 0) {
             addResultSection('Playlists', data.playlists.results);
+            hasResults = true;
+        }
+        
+        if (!hasResults) {
+            searchResults.innerHTML = `
+                <div class="loading">
+                    <i class="fas fa-search"></i>
+                    <p>No results found</p>
+                </div>
+            `;
         }
     } else {
         // Display specific category
@@ -185,8 +212,11 @@ function showBrowseCategories() {
 
 function searchCategory(category) {
     searchInput.value = category;
+    clearSearchBtn.style.display = 'block';
     performSearch(category);
 }
 
 // Initialize
-showBrowseCategories();
+document.addEventListener('DOMContentLoaded', () => {
+    showBrowseCategories();
+});
