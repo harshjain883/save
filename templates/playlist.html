@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Playlist - Spotify Clone</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="sidebar">
+        <div class="logo">
+            <i class="fas fa-music"></i>
+            <h2>Spotify Clone</h2>
+        </div>
+        
+        <nav class="nav-menu">
+            <a href="/" class="nav-item">
+                <i class="fas fa-home"></i>
+                <span>Home</span>
+            </a>
+            <a href="/search" class="nav-item">
+                <i class="fas fa-search"></i>
+                <span>Search</span>
+            </a>
+            <a href="#" class="nav-item">
+                <i class="fas fa-book"></i>
+                <span>Your Library</span>
+            </a>
+        </nav>
+    </div>
+
+    <div class="main-content">
+        <div class="top-bar">
+            <div class="nav-buttons">
+                <button class="nav-btn" onclick="history.back()">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+                <button class="nav-btn" onclick="history.forward()">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
+            <div class="user-menu">
+                <button class="user-btn">
+                    <i class="fas fa-user-circle"></i>
+                    Profile
+                </button>
+            </div>
+        </div>
+
+        <div class="content-wrapper">
+            <!-- Playlist Header -->
+            <div class="playlist-header" id="playlistHeader">
+                <div class="loading">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <p>Loading playlist...</p>
+                </div>
+            </div>
+
+            <!-- Playlist Controls -->
+            <div class="playlist-controls" id="playlistControls" style="display: none;">
+                <button class="play-all-btn" id="playAllBtn">
+                    <i class="fas fa-play"></i>
+                    Play
+                </button>
+                <button class="icon-btn" id="likePlaylistBtn">
+                    <i class="far fa-heart"></i>
+                </button>
+                <button class="icon-btn">
+                    <i class="fas fa-download"></i>
+                </button>
+                <button class="icon-btn">
+                    <i class="fas fa-ellipsis-h"></i>
+                </button>
+            </div>
+
+            <!-- Song List -->
+            <div class="song-list-header">
+                <div class="song-header-number">#</div>
+                <div class="song-header-title">TITLE</div>
+                <div class="song-header-album">ALBUM</div>
+                <div class="song-header-duration">
+                    <i class="far fa-clock"></i>
+                </div>
+            </div>
+            <div class="song-list" id="songList">
+                <!-- Songs will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Music Player -->
+    <div class="music-player" id="musicPlayer">
+        <div class="player-left">
+            <img src="https://via.placeholder.com/56" alt="Album Art" id="playerImage" class="player-image">
+            <div class="player-info">
+                <div class="player-title" id="playerTitle">Select a song</div>
+                <div class="player-artist" id="playerArtist">Artist</div>
+            </div>
+            <button class="player-icon-btn" id="likeBtn">
+                <i class="far fa-heart"></i>
+            </button>
+        </div>
+
+        <div class="player-center">
+            <div class="player-controls">
+                <button class="control-btn" id="shuffleBtn">
+                    <i class="fas fa-random"></i>
+                </button>
+                <button class="control-btn" id="prevBtn">
+                    <i class="fas fa-step-backward"></i>
+                </button>
+                <button class="control-btn play-btn" id="playBtn">
+                    <i class="fas fa-play"></i>
+                </button>
+                <button class="control-btn" id="nextBtn">
+                    <i class="fas fa-step-forward"></i>
+                </button>
+                <button class="control-btn" id="repeatBtn">
+                    <i class="fas fa-redo"></i>
+                </button>
+            </div>
+            <div class="player-timeline">
+                <span class="time-current" id="currentTime">0:00</span>
+                <div class="timeline">
+                    <input type="range" min="0" max="100" value="0" class="timeline-slider" id="timelineSlider">
+                </div>
+                <span class="time-total" id="totalTime">0:00</span>
+            </div>
+        </div>
+
+        <div class="player-right">
+            <button class="player-icon-btn" id="queueBtn">
+                <i class="fas fa-list"></i>
+            </button>
+            <button class="player-icon-btn" id="volumeBtn">
+                <i class="fas fa-volume-up"></i>
+            </button>
+            <div class="volume-control">
+                <input type="range" min="0" max="100" value="70" class="volume-slider" id="volumeSlider">
+            </div>
+        </div>
+    </div>
+
+    <audio id="audioPlayer"></audio>
+
+    <script>
+        const playlistId = "{{ playlist_id }}";
+    </script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/player.js') }}"></script>
+    <script>
+        // Load playlist data
+        async function loadPlaylist() {
+            try {
+                const response = await fetch(`/api/playlists/${playlistId}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayPlaylistHeader(data.data);
+                    displayPlaylistSongs(data.data.songs);
+                    currentQueue = data.data.songs;
+                }
+            } catch (error) {
+                console.error('Error loading playlist:', error);
+                document.getElementById('playlistHeader').innerHTML = `
+                    <div class="loading">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <p>Error loading playlist</p>
+                    </div>
+                `;
+            }
+        }
+
+        function displayPlaylistHeader(playlist) {
+            const header = document.getElementById('playlistHeader');
+            const image = playlist.image?.[2]?.link || playlist.image || 'https://via.placeholder.com/300';
+            const songCount = playlist.songCount || playlist.songs?.length || 0;
+            const followerCount = playlist.followerCount || 0;
+            
+            header.innerHTML = `
+                <img src="${image}" alt="${playlist.name}" class="playlist-image">
+                <div class="playlist-info">
+                    <span class="playlist-type">PLAYLIST</span>
+                    <h1 class="playlist-title">${playlist.name || playlist.title}</h1>
+                    <p class="playlist-description">${playlist.description || ''}</p>
+                    <div class="playlist-meta">
+                        <span class="playlist-owner">
+                            <strong>${playlist.username || 'JioSaavn'}</strong>
+                        </span>
+                        <span>•</span>
+                        <span>${songCount} songs</span>
+                        ${followerCount > 0 ? `<span>•</span><span>${formatFollowers(followerCount)} likes</span>` : ''}
+                    </div>
+                </div>
+            `;
+            document.getElementById('playlistControls').style.display = 'flex';
+        }
+
+        function formatFollowers(count) {
+            if (typeof count !== 'number') return count;
+            if (count >= 1000000) {
+                return (count / 1000000).toFixed(1) + 'M';
+            } else if (count >= 1000) {
+                return (count / 1000).toFixed(1) + 'K';
+            }
+            return count.toString();
+        }
+
+        function displayPlaylistSongs(songs) {
+            if (!songs || songs.length === 0) {
+                document.getElementById('songList').innerHTML = `
+                    <div class="loading">
+                        <i class="fas fa-music"></i>
+                        <p>No songs in this playlist</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const songList = document.getElementById('songList');
+            songList.innerHTML = songs.map((song, index) => `
+                <div class="song-item-full" onclick="playSongFromPlaylist('${song.id}', ${index})">
+                    <div class="song-number">${index + 1}</div>
+                    <div class="song-info">
+                        <img src="${song.image?.[1]?.link || song.image}" alt="${song.name}" class="song-thumb">
+                        <div class="song-text">
+                            <div class="song-name">${song.name || song.title}</div>
+                            <div class="song-artist">${song.primaryArtists || song.artists?.map(a => a.name).join(', ') || ''}</div>
+                        </div>
+                    </div>
+                    <div class="song-album">${song.album?.name || ''}</div>
+                    <div class="song-actions">
+                        <button class="song-like-btn" onclick="event.stopPropagation(); toggleSongLike(${index})">
+                            <i class="far fa-heart"></i>
+                        </button>
+                        <span class="song-duration">${formatDuration(song.duration)}</span>
+                        <button class="song-menu-btn" onclick="event.stopPropagation()">
+                            <i class="fas fa-ellipsis-h"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function playSongFromPlaylist(songId, index) {
+            currentSongIndex = index;
+            await playSongById(songId);
+        }
+
+        function toggleSongLike(index) {
+            const likeBtn = event.currentTarget;
+            const icon = likeBtn.querySelector('i');
+            
+            if (icon.classList.contains('far')) {
+                icon.classList.remove('far');
+                icon.classList.add('fas');
+                likeBtn.style.color = 'var(--accent-color)';
+            } else {
+                icon.classList.remove('fas');
+                icon.classList.add('far');
+                likeBtn.style.color = 'var(--text-secondary)';
+            }
+        }
+
+        function formatDuration(seconds) {
+            if (!seconds) return '0:00';
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        // Like playlist functionality
+        document.addEventListener('DOMContentLoaded', () => {
+            const likePlaylistBtn = document.getElementById('likePlaylistBtn');
+            if (likePlaylistBtn) {
+                likePlaylistBtn.addEventListener('click', () => {
+                    const icon = likePlaylistBtn.querySelector('i');
+                    if (icon.classList.contains('far')) {
+                        icon.classList.remove('far');
+                        icon.classList.add('fas');
+                        likePlaylistBtn.style.color = 'var(--accent-color)';
+                    } else {
+                        icon.classList.remove('fas');
+                        icon.classList.add('far');
+                        likePlaylistBtn.style.color = 'var(--text-secondary)';
+                    }
+                });
+            }
+
+            const playAllBtn = document.getElementById('playAllBtn');
+            if (playAllBtn) {
+                playAllBtn.addEventListener('click', () => {
+                    if (currentQueue.length > 0) {
+                        playSongFromPlaylist(currentQueue[0].id, 0);
+                    }
+                });
+            }
+        });
+
+        loadPlaylist();
+    </script>
+</body>
+</html>
