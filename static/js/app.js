@@ -10,7 +10,7 @@ function formatDuration(seconds) {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-// API Functions with better error handling
+// API Functions
 async function fetchHomeData() {
     try {
         console.log('Fetching home data...');
@@ -18,50 +18,46 @@ async function fetchHomeData() {
         showLoading('chartsGrid');
         showLoading('recommendedGrid');
         
-        // Fetch modules for all sections
-        const modulesResponse = await fetch('/api/modules');
-        console.log('Modules response status:', modulesResponse.status);
+        const response = await fetch('/api/modules');
+        console.log('Response status:', response.status);
         
-        if (!modulesResponse.ok) {
-            throw new Error(`HTTP error! status: ${modulesResponse.status}`);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
         }
         
-        const modulesData = await modulesResponse.json();
-        console.log('Modules data:', modulesData);
+        const result = await response.json();
+        console.log('Modules data:', result);
         
-        if (modulesData.success && modulesData.data) {
-            // Display trending (use albums or playlists)
-            if (modulesData.data.trending) {
-                displayCards('trendingGrid', modulesData.data.trending.slice(0, 6));
-            } else if (modulesData.data.albums) {
-                displayCards('trendingGrid', modulesData.data.albums.slice(0, 6));
+        if (result.success && result.data) {
+            const modules = result.data;
+            
+            // Display different sections
+            if (modules.trending) {
+                displayCards('trendingGrid', modules.trending.albums || modules.trending);
+            } else if (modules.albums) {
+                displayCards('trendingGrid', modules.albums.slice(0, 6));
             }
             
-            // Display charts (use playlists or charts)
-            if (modulesData.data.charts) {
-                displayCards('chartsGrid', modulesData.data.charts.slice(0, 6));
-            } else if (modulesData.data.playlists) {
-                displayCards('chartsGrid', modulesData.data.playlists.slice(0, 6));
+            if (modules.charts) {
+                displayCards('chartsGrid', modules.charts.slice(0, 6));
+            } else if (modules.playlists) {
+                displayCards('chartsGrid', modules.playlists.slice(0, 6));
             }
             
-            // Display recommended
-            if (modulesData.data.albums) {
-                displayCards('recommendedGrid', modulesData.data.albums.slice(6, 12));
-            } else if (modulesData.data.playlists) {
-                displayCards('recommendedGrid', modulesData.data.playlists.slice(6, 12));
+            if (modules.playlists) {
+                displayCards('recommendedGrid', modules.playlists.slice(6, 12));
+            } else if (modules.albums) {
+                displayCards('recommendedGrid', modules.albums.slice(6, 12));
             }
         } else {
-            console.error('No data in response:', modulesData);
-            showError('trendingGrid', 'No content available');
-            showError('chartsGrid', 'No content available');
-            showError('recommendedGrid', 'No content available');
+            throw new Error('No data received');
         }
         
     } catch (error) {
-        console.error('Error fetching home data:', error);
-        showError('trendingGrid', 'Failed to load content. Please refresh.');
-        showError('chartsGrid', 'Failed to load content. Please refresh.');
-        showError('recommendedGrid', 'Failed to load content. Please refresh.');
+        console.error('Error:', error);
+        showError('trendingGrid', 'Failed to load. Please refresh.');
+        showError('chartsGrid', 'Failed to load. Please refresh.');
+        showError('recommendedGrid', 'Failed to load. Please refresh.');
     }
 }
 
@@ -91,15 +87,15 @@ function showError(containerId, message) {
 
 function displayCards(containerId, items) {
     const container = document.getElementById(containerId);
-    if (!container || !items || items.length === 0) {
-        if (container) {
-            container.innerHTML = `
-                <div class="loading">
-                    <i class="fas fa-music"></i>
-                    <p>No items to display</p>
-                </div>
-            `;
-        }
+    if (!container) return;
+    
+    if (!items || items.length === 0) {
+        container.innerHTML = `
+            <div class="loading">
+                <i class="fas fa-music"></i>
+                <p>No items available</p>
+            </div>
+        `;
         return;
     }
     
@@ -107,38 +103,41 @@ function displayCards(containerId, items) {
 }
 
 function createCard(item) {
-    // Handle different image formats
     let image = 'https://via.placeholder.com/300';
+    
     if (item.image) {
         if (Array.isArray(item.image)) {
-            image = item.image[2]?.link || item.image[1]?.link || item.image[0]?.link || image;
+            image = item.image[2]?.url || item.image[2]?.link || 
+                   item.image[1]?.url || item.image[1]?.link || 
+                   item.image[0]?.url || item.image[0]?.link || image;
         } else if (typeof item.image === 'string') {
             image = item.image;
+        } else if (item.image.url) {
+            image = item.image.url;
         }
     }
     
     const title = item.name || item.title || 'Unknown';
-    const subtitle = item.primaryArtists || item.artist || item.description || item.subtitle || '';
-    const type = item.type || 'song';
+    const subtitle = item.description || item.subtitle || item.artistMap?.artists?.map(a => a.name).join(', ') || '';
+    const type = item.type || 'album';
     const id = item.id;
     
     let link = '#';
-    if (type === 'album') {
-        link = `/album/${id}`;
-    } else if (type === 'artist') {
-        link = `/artist/${id}`;
-    } else if (type === 'playlist') {
-        link = `/playlist/${id}`;
-    }
+    if (type === 'album') link = `/album/${id}`;
+    else if (type === 'artist') link = `/artist/${id}`;
+    else if (type === 'playlist') link = `/playlist/${id}`;
+    else if (type === 'song') link = `javascript:playSongById('${id}')`;
     
     return `
-        <div class="card" onclick="handleCardClick('${type}', '${id}', '${link}')">
+        <div class="card" onclick="handleCardClick('${type}', '${id}', '${link.replace(/'/g, "\\'")}')">
             <img src="${image}" alt="${title}" class="card-image" onerror="this.src='https://via.placeholder.com/300'">
             <div class="card-title">${title}</div>
             <div class="card-subtitle">${subtitle}</div>
-            ${type === 'song' ? `<button class="play-button" onclick="event.stopPropagation(); playSongById('${id}')">
-                <i class="fas fa-play"></i>
-            </button>` : ''}
+            ${type === 'song' ? `
+                <button class="play-button" onclick="event.stopPropagation(); playSongById('${id}')">
+                    <i class="fas fa-play"></i>
+                </button>
+            ` : ''}
         </div>
     `;
 }
@@ -146,99 +145,89 @@ function createCard(item) {
 function handleCardClick(type, id, link) {
     if (type === 'song') {
         playSongById(id);
-    } else {
+    } else if (link && link !== '#' && !link.startsWith('javascript:')) {
         window.location.href = link;
     }
 }
 
-// Play song by ID with better error handling
+// Play song
 async function playSongById(songId) {
     try {
         console.log('Fetching song:', songId);
+        
         const response = await fetch(`/api/songs/${songId}`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
+        const result = await response.json();
+        console.log('Song data:', result);
         
-        const data = await response.json();
-        console.log('Song data:', data);
-        
-        if (data.success && data.data) {
-            const song = Array.isArray(data.data) ? data.data[0] : data.data;
-            playSong(song);
+        if (result.success && result.data && result.data.length > 0) {
+            playSong(result.data[0]);
         } else {
-            console.error('Failed to load song:', data);
-            alert('Failed to load song. Please try again.');
+            alert('Failed to load song');
         }
     } catch (error) {
         console.error('Error playing song:', error);
-        alert('Error playing song. Please try again.');
+        alert('Error playing song: ' + error.message);
     }
 }
 
 function playSong(song) {
-    console.log('Playing song:', song);
+    console.log('Playing:', song);
     
-    // Handle different download URL formats
+    // Get audio URL
     let audioUrl = null;
     if (song.downloadUrl) {
         if (Array.isArray(song.downloadUrl)) {
-            // Try to get highest quality
-            audioUrl = song.downloadUrl[song.downloadUrl.length - 1]?.link || 
-                       song.downloadUrl[0]?.link;
+            const quality = song.downloadUrl.find(q => q.quality === '320kbps') || 
+                          song.downloadUrl.find(q => q.quality === '160kbps') || 
+                          song.downloadUrl[song.downloadUrl.length - 1];
+            audioUrl = quality?.url || quality?.link;
         } else if (typeof song.downloadUrl === 'string') {
             audioUrl = song.downloadUrl;
         }
     }
     
-    // Fallback to url field
-    if (!audioUrl && song.url) {
-        audioUrl = song.url;
-    }
+    if (!audioUrl && song.url) audioUrl = song.url;
     
     if (!audioUrl) {
-        console.error('No audio URL found in song data:', song);
-        alert('Unable to play this song. No audio URL available.');
+        console.error('No audio URL found');
+        alert('No playable audio found for this song');
         return;
     }
     
     console.log('Audio URL:', audioUrl);
     
-    // Get image URL
+    // Get image
     let imageUrl = 'https://via.placeholder.com/300';
     if (song.image) {
         if (Array.isArray(song.image)) {
-            imageUrl = song.image[2]?.link || song.image[1]?.link || song.image[0]?.link || imageUrl;
+            imageUrl = song.image[2]?.url || song.image[2]?.link || 
+                      song.image[1]?.url || song.image[0]?.url || imageUrl;
         } else if (typeof song.image === 'string') {
             imageUrl = song.image;
         }
     }
     
-    // Update player UI
+    // Update player
     document.getElementById('playerImage').src = imageUrl;
     document.getElementById('playerTitle').textContent = song.name || song.title || 'Unknown';
-    document.getElementById('playerArtist').textContent = song.primaryArtists || song.artist || 'Unknown Artist';
+    document.getElementById('playerArtist').textContent = 
+        song.artistMap?.artists?.map(a => a.name).join(', ') || 
+        song.artists || 'Unknown Artist';
     
-    // Play audio
-    const audioPlayer = document.getElementById('audioPlayer');
-    audioPlayer.src = audioUrl;
-    
-    audioPlayer.play().then(() => {
-        console.log('Playing audio successfully');
-    }).catch(error => {
-        console.error('Error playing audio:', error);
-        alert('Failed to play audio. The audio format might not be supported.');
+    // Play
+    const audio = document.getElementById('audioPlayer');
+    audio.src = audioUrl;
+    audio.play().catch(err => {
+        console.error('Play error:', err);
+        alert('Failed to play audio. Browser may have blocked it.');
     });
-    
-    // Update play button
-    const playBtn = document.getElementById('playBtn');
-    playBtn.innerHTML = '<i class="fas fa-pause"></i>';
 }
 
-// Initialize page
+// Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('Page loaded, pathname:', window.location.pathname);
+    console.log('DOM loaded');
     if (window.location.pathname === '/') {
         fetchHomeData();
     }
